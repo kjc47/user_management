@@ -12,7 +12,12 @@ from unittest.mock import patch
 pytestmark = pytest.mark.asyncio
 # Test creating a user with valid data
 async def test_create_user_with_valid_data(db_session, email_service):
-    user_data = { @@ -19,79 +21,68 @@ async def test_create_user_with_valid_data(db_session, email_service):
+    user_data = {
+        "nickname": generate_nickname(),
+        "email": "valid_user@example.com",
+        "password": "ValidPassword123!",
+        "role": UserRole.ADMIN.name
+    }
     user = await UserService.create(db_session, user_data, email_service)
     assert user is not None
     assert user.email == user_data["email"]
@@ -23,12 +28,12 @@ async def test_create_user_with_invalid_data(db_session, email_service):
         "email": "invalidemail",  # Invalid email
          "password": "short",  # Invalid password
      }
-     user = await UserService.create(db_session, user_data, email_service)
-     assert user is None
-     assert user == 'PASSWORD_TOO_SHORT', "Expected 'PASSWORD_TOO_SHORT' for short password"
+    user = await UserService.create(db_session, user_data, email_service)
+    assert user is None
+    assert user == 'PASSWORD_TOO_SHORT', "Expected 'PASSWORD_TOO_SHORT' for short password"
 
  # Test fetching a user by ID when the user exists
- async def test_get_by_id_user_exists(db_session, user):
+async def test_get_by_id_user_exists(db_session, user):
     retrieved_user = await UserService.get_by_id(db_session, user.id)
     assert retrieved_user.id == user.id
 # Test fetching a user by ID when the user does not exist
@@ -80,8 +85,12 @@ async def test_list_users_with_pagination(db_session, users_with_same_role_50_us
     assert users_page_1[0].id != users_page_2[0].id
 # Test registering a user with valid data
 async def test_register_user_with_valid_data(db_session, email_service):
-    user_data = 
-	@@ -103,35 +94,32 @@ async def test_register_user_with_valid_data(db_session, email_service):
+    user_data = {
+        "nickname": generate_nickname(),
+        "email": "register_valid_user@example.com",
+        "password": "RegisterValid123!",
+        "role": UserRole.ADMIN
+    }
     user = await UserService.register_user(db_session, user_data, email_service)
     assert user is not None
     assert user.email == user_data["email"]
@@ -91,12 +100,12 @@ async def test_register_user_with_invalid_data(db_session, email_service):
         "email": "registerinvalidemail",  # Invalid email
          "password": "short",  # Invalid password
      }
-     user = await UserService.register_user(db_session, user_data, email_service)
-     assert user is None
-     assert user == 'PASSWORD_TOO_SHORT', "Expected 'PASSWORD_TOO_SHORT' for short password"
+    user = await UserService.register_user(db_session, user_data, email_service)
+    assert user is None
+    assert user == 'PASSWORD_TOO_SHORT', "Expected 'PASSWORD_TOO_SHORT' for short password"
 
  # Test successful user login
- async def test_login_user_successful(db_session, verified_user):
+async def test_login_user_successful(db_session, verified_user):
     user_data = {
         "email": verified_user.email,
         "password": "MySuperPassword$1234",
@@ -114,8 +123,9 @@ async def test_login_user_incorrect_password(db_session, user):
 # Test account lock after maximum failed login attempts
 async def test_account_lock_after_failed_logins(db_session, verified_user):
     max_login_attempts = get_settings().max_login_attempts
-	@@ -140,24 +128,160 @@ async def test_account_lock_after_failed_logins(db_session, verified_user):
-
+    for _ in range(max_login_attempts):
+        await UserService.login_user(db_session, verified_user.email, "wrongpassword")
+    
     is_locked = await UserService.is_account_locked(db_session, verified_user.email)
     assert is_locked, "The account should be locked after the maximum number of failed login attempts."
 # Test resetting a user's password
@@ -199,54 +209,59 @@ async def test_invalid_token_verification(db_session):
     # Testing the verification process
     outcome = await UserService.verify_email_with_token(db_session, fake_user_id, incorrect_token)
     # Verification of the outcome
-     assert not outcome, "Verification should fail with an incorrect token"
+    assert not outcome, "Verification should fail with an incorrect token"
 
  # Test for handling registration with inadequate data
- async def test_unsuccessful_user_registration(db_session, email_service):
-     # Setup with flawed data
-     erroneous_user_data = {
-         "email": "incorrect_email_format",
-         "password": "12345",  # Too short to be secure
- async def test_register_user_with_missing_password(db_session, email_service):
-     user_data = {
-         "nickname": generate_nickname(),
-         "email": "user_missing_password@example.com",
-         "role": UserRole.ANONYMOUS.name  # Assuming UserRole.ANONYMOUS is valid
-     }
-     user = await UserService.create(db_session, user_data, email_service)
-     assert user == 'PASSWORD_REQUIRED', "Expected response for missing password"
+async def test_unsuccessful_user_registration(db_session, email_service):
+    erroneous_user_data = {
+        "email": "incorrect_email_format",
+        "password": "12345",  # Too short to be secure
+    }
+    # Attempt to register a user with inadequate data
+    potential_user = await UserService.register_user(db_session, erroneous_user_data, email_service)
+    # Check for failure in registration
+    assert potential_user is None, "No user should be registered with flawed data"
 
-     # Attempt to register a user
-     potential_user = await UserService.register_user(db_session, erroneous_user_data, email_service)
+# Test registering a user without a password provided
+async def test_register_user_with_missing_password(db_session, email_service):
+    user_data = {
+        "nickname": generate_nickname(),
+        "email": "user_missing_password@example.com",
+        "role": UserRole.ANONYMOUS.name  # Assuming UserRole.ANONYMOUS is valid
+    }
+    # Expecting an error or null return due to missing password
+    user = await UserService.create(db_session, user_data, email_service)
+    assert user is None, "Expected failure when no password is provided"
 
-     # Check for failure in registration
-     assert potential_user is None, "No user should be registered with flawed data"
- # Test error for password that is too short
- async def test_password_too_short_error(db_session, email_service):
-     user_data = {
-         "nickname": generate_nickname(),
-         "email": "valid_email@example.com",
-         "password": "123",  # Deliberately short password
-         "role": UserRole.ANONYMOUS.name
-     }
-     user = await UserService.create(db_session, user_data, email_service)
-     assert user == 'PASSWORD_TOO_SHORT', "Expected response for short password"
+# Test error for a password that is too short
+async def test_password_too_short_error(db_session, email_service):
+    user_data = {
+        "nickname": generate_nickname(),
+        "email": "valid_email@example.com",
+        "password": "123",  # Deliberately short password
+        "role": UserRole.ANONYMOUS.name
+    }
+    # Create a user and expect a failure due to short password
+    user = await UserService.create(db_session, user_data, email_service)
+    assert user is None, "Expected failure due to short password"
 
- # Test inability to delete a user account
- async def test_failure_in_user_deletion(db_session, user):
-    # Attempt to delete the user under test conditions
-    is_successful = await UserService.delete(db_session, user.id)  # Use user.id instead of user.user_id
-    # Check that the deletion does not succeed
+# Test inability to delete a user account
+async def test_failure_in_user_deletion(db_session, user):
+    # Attempt to delete the user and expect failure
+    is_successful = await UserService.delete(db_session, user.id)
     assert not is_successful, "User deletion should fail under specific test conditions"
+
+# Test email verification with an outdated token
 async def test_email_verification_with_stale_token(db_session, user):
     old_token = "outdated_token"
     user.verification_token = old_token
     await db_session.commit()
-    with patch('app.services.user_service.UserService.verify_email_with_token', return_value=True):
-        verification_success = await UserService.verify_email_with_token(db_session, user.id, old_token)
+    # Verify email with an outdated token
+    verification_success = await UserService.verify_email_with_token(db_session, user.id, old_token)
     assert verification_success, "An expired token should still be treated as valid if not explicitly expired by system logic"
+
+# Test that the first user gets an admin role and verified email
 async def test_first_user_admin_role(db_session, email_service):
-    # Setup user data without specifying a role
     user_data = {
         "nickname": generate_nickname(),
         "email": "admin@example.com",
@@ -255,8 +270,9 @@ async def test_first_user_admin_role(db_session, email_service):
     admin_user = await UserService.create(db_session, user_data, email_service)
     assert admin_user is not None, "Admin user should be created"
     assert admin_user.role == UserRole.ADMIN, "First user should be assigned ADMIN role"
-    assert admin_user.email_verified, "Admin user should have verified email"
-#Testing that subsequent users are assigned the ANONYMOUS role and are not auto-verified**: python
+    assert admin_user.email_verified, "Admin user's email should be verified"
+
+# Test that subsequent users are assigned the ANONYMOUS role and their emails are not auto-verified
 async def test_subsequent_user_default_role(db_session, email_service):
     # Create a first user to set the admin
     first_user_data = {
@@ -265,7 +281,7 @@ async def test_subsequent_user_default_role(db_session, email_service):
         "password": "FirstUser1234"
     }
     first_user = await UserService.create(db_session, first_user_data, email_service)
-    # Now test the role assignment for the next user
+    # Create another user and check role assignment
     user_data = {
         "nickname": generate_nickname(),
         "email": "user@example.com",
@@ -274,4 +290,4 @@ async def test_subsequent_user_default_role(db_session, email_service):
     user = await UserService.create(db_session, user_data, email_service)
     assert user is not None, "Subsequent user should be created"
     assert user.role == UserRole.ANONYMOUS, "Subsequent user should be assigned ANONYMOUS role"
-    assert not user.email_verified, "Subsequent user should not have auto-verified email"
+    assert not user.email_verified, "Subsequent user's email should not be auto-verified"

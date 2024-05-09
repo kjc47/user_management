@@ -12,8 +12,7 @@ from unittest.mock import patch
 pytestmark = pytest.mark.asyncio
 # Test creating a user with valid data
 async def test_create_user_with_valid_data(db_session, email_service):
-    user_data = {
-	@@ -19,79 +21,68 @@ async def test_create_user_with_valid_data(db_session, email_service):
+    user_data = { @@ -19,79 +21,68 @@ async def test_create_user_with_valid_data(db_session, email_service):
     user = await UserService.create(db_session, user_data, email_service)
     assert user is not None
     assert user.email == user_data["email"]
@@ -81,7 +80,7 @@ async def test_list_users_with_pagination(db_session, users_with_same_role_50_us
     assert users_page_1[0].id != users_page_2[0].id
 # Test registering a user with valid data
 async def test_register_user_with_valid_data(db_session, email_service):
-    user_data = {
+    user_data = 
 	@@ -103,35 +94,32 @@ async def test_register_user_with_valid_data(db_session, email_service):
     user = await UserService.register_user(db_session, user_data, email_service)
     assert user is not None

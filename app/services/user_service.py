@@ -71,10 +71,11 @@ class UserService:
 
             else:
                 new_user.verification_token = generate_verification_token()
-                await email_service.send_verification_email(new_user)
+                
 
             session.add(new_user)
-            await session.commit()
+            if new_user.email_verified == False:
+                await email_service.send_verification_email(new_user)
             return new_user
         except ValidationError as e:
             logger.error(f"Validation error during user creation: {e}")
@@ -107,6 +108,7 @@ class UserService:
         user = await cls.get_by_id(session, user_id)
         if not user:
             logger.info(f"User with ID {user_id} not found.")
+            
             return False
         await session.delete(user)
         await session.commit()

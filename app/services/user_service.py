@@ -108,6 +108,7 @@ class UserService:
         user = await cls.get_by_id(session, user_id)
         if not user:
             logger.info(f"User with ID {user_id} not found.")
+            
             return False
         await session.delete(user)
         await session.commit()
